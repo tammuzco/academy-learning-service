@@ -69,6 +69,11 @@ class SynchronizedData(BaseSynchronizedData):
     def price(self) -> Optional[float]:
         """Get the token price."""
         return self.db.get("price", None)
+    
+    @property
+    def symbol(self) -> Optional[float]:
+        """Get the token symbol."""
+        return self.db.get("symbol", None)
 
     @property
     def price_ipfs_hash(self) -> Optional[str]:
@@ -132,6 +137,7 @@ class DataPullRound(CollectSameUntilThresholdRound):
     # from the payload class.
     selection_key = (
         get_name(SynchronizedData.price),
+        get_name(SynchronizedData.symbol),
         get_name(SynchronizedData.price_ipfs_hash),
         get_name(SynchronizedData.native_balance),
         get_name(SynchronizedData.erc20_balance),

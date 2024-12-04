@@ -142,6 +142,8 @@ class DataPullBehaviour(LearningBaseBehaviour):  # pylint: disable=too-many-ance
             # This call replaces the previous price, it is just an example
             price = yield from self.get_token_price_specs()
 
+            symbol = yield from self.get_token_symbol()
+
             # Store the price in IPFS
             price_ipfs_hash = yield from self.send_price_to_ipfs(price)
 
@@ -156,6 +158,7 @@ class DataPullBehaviour(LearningBaseBehaviour):  # pylint: disable=too-many-ance
             payload = DataPullPayload(
                 sender=sender,
                 price=price,
+                symbol=symbol,
                 price_ipfs_hash=price_ipfs_hash,
                 native_balance=native_balance,
                 erc20_balance=erc20_balance,
@@ -287,6 +290,46 @@ class DataPullBehaviour(LearningBaseBehaviour):  # pylint: disable=too-many-ance
         self.context.logger.error(f"Got native balance: {balance}")
 
         return balance
+    
+    def get_token_symbol(self) -> Generator[None, None, Optional[str]]:
+        """Get token symbol"""
+        self.context.logger.info(
+            f"Getting token symbol for contract at {self.params.token_address}"
+        )
+
+        # Use the contract api to interact with the ERC20 contract
+        response_msg = yield from self.get_contract_api_response(
+            performative=ContractApiMessage.Performative.GET_RAW_TRANSACTION,  # type: ignore
+            contract_address=self.params.token_address,
+            contract_id=str(ERC20.contract_id),
+            contract_callable="get_symbol",
+            chain_id=GNOSIS_CHAIN_ID,
+        )
+
+        # Check response performative
+        if response_msg.performative != ContractApiMessage.Performative.RAW_TRANSACTION:
+            self.context.logger.error(
+                f"Unexpected performative: {response_msg.performative}"
+            )
+            return None
+
+        # Extract symbol from response
+        symbol = response_msg.raw_transaction.body.get("symbol", None)
+        error = response_msg.raw_transaction.body.get("error", None)
+
+        if error is not None:
+            self.context.logger.error(f"Error getting symbol: {error}")
+            return None
+
+        if symbol is None:
+            self.context.logger.error("Symbol not found in response")
+            return None
+
+        self.context.logger.info(
+            f"Token at {self.params.token_address} has symbol {symbol}"
+        )
+        return symbol
+
 
 class DefiLlamaPullBehaviour(LearningBaseBehaviour): # pylint: disable=too-many-ancestors
     """DefiLlamaPullBehaviour"""
