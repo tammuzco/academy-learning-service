@@ -39,6 +39,7 @@ from packages.valory.skills.learning_abci.payloads import (
     DefiLlamaPullPayload,
     DecisionMakingPayload,
     TxPreparationPayload,
+    PostPreparationPayload,
 )
 
 
@@ -177,7 +178,6 @@ class DecisionMakingRound(CollectSameUntilThresholdRound):
 
     # Event.DONE, Event.ERROR, Event.TRANSACT, Event.ROUND_TIMEOUT  # this needs to be referenced for static checkers
 
-
 class TxPreparationRound(CollectSameUntilThresholdRound):
     """TxPreparationRound"""
 
@@ -193,6 +193,20 @@ class TxPreparationRound(CollectSameUntilThresholdRound):
 
     # Event.ROUND_TIMEOUT  # this needs to be referenced for static checkers
 
+class PostPreparationRound(CollectSameUntilThresholdRound):
+    """PostPreparationRound"""
+
+    payload_class = PostPreparationPayload
+    synchronized_data_class = SynchronizedData
+    done_event = Event.DONE
+    no_majority_event = Event.NO_MAJORITY
+    collection_key = get_name(SynchronizedData.participant_to_tx_round)
+    selection_key = (
+        get_name(SynchronizedData.tx_submitter),
+        get_name(SynchronizedData.most_voted_tx_hash),
+    )
+
+    # Event.ROUND_TIMEOUT  # this needs to be referenced for static checkers
 
 class FinishedDecisionMakingRound(DegenerateRound):
     """FinishedDecisionMakingRound"""
@@ -230,6 +244,11 @@ class LearningAbciApp(AbciApp[Event]):
         TxPreparationRound: {
             Event.NO_MAJORITY: TxPreparationRound,
             Event.ROUND_TIMEOUT: TxPreparationRound,
+            Event.DONE: PostPreparationRound,
+        },
+        PostPreparationRound: {
+            Event.NO_MAJORITY: PostPreparationRound,
+            Event.ROUND_TIMEOUT: PostPreparationRound,
             Event.DONE: FinishedTxPreparationRound,
         },
         FinishedDecisionMakingRound: {},

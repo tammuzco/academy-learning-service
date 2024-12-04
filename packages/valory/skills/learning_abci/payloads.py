@@ -54,3 +54,10 @@ class TxPreparationPayload(BaseTxPayload):
 
     tx_submitter: Optional[str] = None
     tx_hash: Optional[str] = None
+
+@dataclass(frozen=True)
+class PostPreparationPayload(BaseTxPayload):
+    """Represent a transaction payload for the TxPreparationRound."""
+
+    tx_submitter: Optional[str] = None
+    tx_hash: Optional[str] = None
