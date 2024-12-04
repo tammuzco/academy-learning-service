@@ -34,6 +34,12 @@ class DataPullPayload(BaseTxPayload):
     native_balance: Optional[float]
     erc20_balance: Optional[float]
 
+@dataclass(frozen=True)
+class DefiLlamaPullPayload(BaseTxPayload):
+    """Represent a transaction payload for the pulling data from DefiLlama."""
+
+    tvl: Optional[float]
+    tvl_ipfs_hash: Optional[str]
 
 @dataclass(frozen=True)
 class DecisionMakingPayload(BaseTxPayload):
@@ -44,6 +50,13 @@ class DecisionMakingPayload(BaseTxPayload):
 
 @dataclass(frozen=True)
 class TxPreparationPayload(BaseTxPayload):
+    """Represent a transaction payload for the TxPreparationRound."""
+
+    tx_submitter: Optional[str] = None
+    tx_hash: Optional[str] = None
+
+@dataclass(frozen=True)
+class PostPreparationPayload(BaseTxPayload):
     """Represent a transaction payload for the TxPreparationRound."""
 
     tx_submitter: Optional[str] = None
