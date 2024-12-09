@@ -294,13 +294,13 @@ class DataPullBehaviour(LearningBaseBehaviour):  # pylint: disable=too-many-ance
     def get_token_symbol(self) -> Generator[None, None, Optional[str]]:
         """Get token symbol"""
         self.context.logger.info(
-            f"Getting token symbol for contract at {self.params.token_address}"
+            f"Getting token symbol for contract at {self.params.olas_token_address}"
         )
 
         # Use the contract api to interact with the ERC20 contract
         response_msg = yield from self.get_contract_api_response(
             performative=ContractApiMessage.Performative.GET_RAW_TRANSACTION,  # type: ignore
-            contract_address=self.params.token_address,
+            contract_address=self.params.olas_token_address,
             contract_id=str(ERC20.contract_id),
             contract_callable="get_symbol",
             chain_id=GNOSIS_CHAIN_ID,
@@ -326,7 +326,7 @@ class DataPullBehaviour(LearningBaseBehaviour):  # pylint: disable=too-many-ance
             return None
 
         self.context.logger.info(
-            f"Token at {self.params.token_address} has symbol {symbol}"
+            f"Token at {self.params.olas_token_address} has symbol {symbol}"
         )
         return symbol
 
@@ -443,13 +443,14 @@ class DecisionMakingBehaviour(
 
         # If the number is even, we transact
         # Changed to always true - so we will transact every time
-        if last_number: #% 2 == 0:
-            self.context.logger.info("Number is even. Transacting.")
-            return Event.TRANSACT.value
+        # if True: #last_number: % 2 == 0:
+        #####################################################
+        self.context.logger.info("Number is even. Transacting.")
+        return Event.TRANSACT.value
 
         # Otherwise we send the DONE event
-        self.context.logger.info("Number is odd. Not transacting.")
-        return Event.DONE.value
+        # self.context.logger.info("Number is odd. Not transacting.")
+        # return Event.DONE.value
 
     def get_block_number(self) -> Generator[None, None, Optional[int]]:
         """Get the block number"""
