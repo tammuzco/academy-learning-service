@@ -36,8 +36,10 @@ from packages.valory.skills.abstract_round_abci.base import (
 )
 from packages.valory.skills.learning_abci.payloads import (
     DataPullPayload,
+    DefiLlamaPullPayload,
     DecisionMakingPayload,
     TxPreparationPayload,
+    PostPreparationPayload,
 )
 
 
@@ -67,6 +69,11 @@ class SynchronizedData(BaseSynchronizedData):
     def price(self) -> Optional[float]:
         """Get the token price."""
         return self.db.get("price", None)
+    
+    @property
+    def symbol(self) -> Optional[float]:
+        """Get the token symbol."""
+        return self.db.get("symbol", None)
 
     @property
     def price_ipfs_hash(self) -> Optional[str]:
@@ -82,6 +89,16 @@ class SynchronizedData(BaseSynchronizedData):
     def erc20_balance(self) -> Optional[float]:
         """Get the erc20 balance."""
         return self.db.get("erc20_balance", None)
+    
+    @property
+    def tvl(self) -> Optional[float]:
+        """Get the Uniswap TVL."""
+        return self.db.get("tvl", None)
+    
+    @property
+    def tvl_ipfs_hash(self) -> Optional[str]:
+        """Get the TVL IPFS Hash."""
+        return self.db.get("tvl_ipfs_hash", None)
 
     @property
     def participant_to_data_round(self) -> DeserializedCollection:
@@ -120,6 +137,7 @@ class DataPullRound(CollectSameUntilThresholdRound):
     # from the payload class.
     selection_key = (
         get_name(SynchronizedData.price),
+        get_name(SynchronizedData.symbol),
         get_name(SynchronizedData.price_ipfs_hash),
         get_name(SynchronizedData.native_balance),
         get_name(SynchronizedData.erc20_balance),
@@ -127,6 +145,20 @@ class DataPullRound(CollectSameUntilThresholdRound):
 
     # Event.ROUND_TIMEOUT  # this needs to be referenced for static checkers
 
+class DefiLlamaPullRound(CollectSameUntilThresholdRound):
+    """DefiLlamaPullRound"""
+
+    payload_class = DefiLlamaPullPayload
+    synchronized_data_class = SynchronizedData
+    done_event = Event.DONE
+    no_majority_event = Event.NO_MAJORITY
+    collection_key = get_name(SynchronizedData.participant_to_data_round)
+    selection_key = (
+        get_name(SynchronizedData.tvl),
+        get_name(SynchronizedData.tvl_ipfs_hash),
+    )
+
+    # Event.ROUND_TIMEOUT  # this needs to be referenced for static checkers
 
 class DecisionMakingRound(CollectSameUntilThresholdRound):
     """DecisionMakingRound"""
@@ -152,7 +184,6 @@ class DecisionMakingRound(CollectSameUntilThresholdRound):
 
     # Event.DONE, Event.ERROR, Event.TRANSACT, Event.ROUND_TIMEOUT  # this needs to be referenced for static checkers
 
-
 class TxPreparationRound(CollectSameUntilThresholdRound):
     """TxPreparationRound"""
 
@@ -168,6 +199,20 @@ class TxPreparationRound(CollectSameUntilThresholdRound):
 
     # Event.ROUND_TIMEOUT  # this needs to be referenced for static checkers
 
+class PostPreparationRound(CollectSameUntilThresholdRound):
+    """PostPreparationRound"""
+
+    payload_class = PostPreparationPayload
+    synchronized_data_class = SynchronizedData
+    done_event = Event.DONE
+    no_majority_event = Event.NO_MAJORITY
+    collection_key = get_name(SynchronizedData.participant_to_tx_round)
+    selection_key = (
+        get_name(SynchronizedData.tx_submitter),
+        get_name(SynchronizedData.most_voted_tx_hash),
+    )
+
+    # Event.ROUND_TIMEOUT  # this needs to be referenced for static checkers
 
 class FinishedDecisionMakingRound(DegenerateRound):
     """FinishedDecisionMakingRound"""
@@ -188,6 +233,11 @@ class LearningAbciApp(AbciApp[Event]):
         DataPullRound: {
             Event.NO_MAJORITY: DataPullRound,
             Event.ROUND_TIMEOUT: DataPullRound,
+            Event.DONE: DefiLlamaPullRound,
+        },
+        DefiLlamaPullRound: {
+            Event.NO_MAJORITY: DefiLlamaPullRound,
+            Event.ROUND_TIMEOUT: DefiLlamaPullRound,
             Event.DONE: DecisionMakingRound,
         },
         DecisionMakingRound: {
@@ -200,6 +250,11 @@ class LearningAbciApp(AbciApp[Event]):
         TxPreparationRound: {
             Event.NO_MAJORITY: TxPreparationRound,
             Event.ROUND_TIMEOUT: TxPreparationRound,
+            Event.DONE: PostPreparationRound,
+        },
+        PostPreparationRound: {
+            Event.NO_MAJORITY: PostPreparationRound,
+            Event.ROUND_TIMEOUT: PostPreparationRound,
             Event.DONE: FinishedTxPreparationRound,
         },
         FinishedDecisionMakingRound: {},
@@ -213,6 +268,7 @@ class LearningAbciApp(AbciApp[Event]):
     cross_period_persisted_keys: FrozenSet[str] = frozenset()
     db_pre_conditions: Dict[AppState, Set[str]] = {
         DataPullRound: set(),
+        DefiLlamaPullRound: set()
     }
     db_post_conditions: Dict[AppState, Set[str]] = {
         FinishedDecisionMakingRound: set(),

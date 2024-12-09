@@ -64,6 +64,22 @@ class ERC20(Contract):
         return dict(data=allowance)
 
     @classmethod
+    def get_symbol(
+        cls,
+        ledger_api: EthereumApi,
+        contract_address: str,
+    ) -> JSONLike:
+        """
+        Get the token symbol.
+        """
+        try:
+            contract_instance = cls.get_instance(ledger_api, contract_address)
+            symbol = contract_instance.functions.symbol().call()
+            return dict(symbol=symbol, error=None)
+        except Exception as e:
+            return dict(symbol=None, error=str(e))
+
+    @classmethod
     def build_deposit_tx(
         cls,
         ledger_api: EthereumApi,
