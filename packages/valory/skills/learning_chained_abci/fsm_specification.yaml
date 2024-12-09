@@ -25,6 +25,7 @@ start_states:
 - RegistrationStartupRound
 states:
 - DataPullRound
+- DefiLlamaPullRound
 - CheckLateTxHashesRound
 - CheckTransactionHistoryRound
 - CollectSignatureRound
@@ -40,11 +41,15 @@ states:
 - SelectKeeperTransactionSubmissionBRound
 - SynchronizeLateMessagesRound
 - TxPreparationRound
+- PostPreparationRound
 - ValidateTransactionRound
 transition_func:
-    (DataPullRound, DONE): DecisionMakingRound
+    (DataPullRound, DONE): DefiLlamaPullRound
     (DataPullRound, NO_MAJORITY): DataPullRound
     (DataPullRound, ROUND_TIMEOUT): DataPullRound
+    (DefiLlamaPullRound, DONE): DecisionMakingRound
+    (DefiLlamaPullRound, NO_MAJORITY): DefiLlamaPullRound
+    (DefiLlamaPullRound, ROUND_TIMEOUT): DefiLlamaPullRound
     (CheckLateTxHashesRound, CHECK_LATE_ARRIVING_MESSAGE): SynchronizeLateMessagesRound
     (CheckLateTxHashesRound, CHECK_TIMEOUT): CheckLateTxHashesRound
     (CheckLateTxHashesRound, DONE): ResetAndPauseRound
@@ -101,9 +106,12 @@ transition_func:
     (SynchronizeLateMessagesRound, NONE): SelectKeeperTransactionSubmissionBRound
     (SynchronizeLateMessagesRound, ROUND_TIMEOUT): SynchronizeLateMessagesRound
     (SynchronizeLateMessagesRound, SUSPICIOUS_ACTIVITY): RandomnessTransactionSubmissionRound
-    (TxPreparationRound, DONE): RandomnessTransactionSubmissionRound
+    (TxPreparationRound, DONE): PostPreparationRound
     (TxPreparationRound, NO_MAJORITY): TxPreparationRound
     (TxPreparationRound, ROUND_TIMEOUT): TxPreparationRound
+    (PostPreparationRound, DONE): RandomnessTransactionSubmissionRound
+    (PostPreparationRound, NO_MAJORITY): PostPreparationRound
+    (PostPreparationRound, ROUND_TIMEOUT): PostPreparationRound
     (ValidateTransactionRound, DONE): ResetAndPauseRound
     (ValidateTransactionRound, NEGATIVE): CheckTransactionHistoryRound
     (ValidateTransactionRound, NONE): SelectKeeperTransactionSubmissionBRound
