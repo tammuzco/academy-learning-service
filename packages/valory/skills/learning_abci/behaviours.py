@@ -525,10 +525,10 @@ class TxPreparationBehaviour(
         # Again, make a decision based on the timestamp (on its last number)
         now = int(self.get_sync_timestamp())
         self.context.logger.info(f"Timestamp is {now}")
-        # last_number = int(str(now)[-1])
+        last_number = int(str(now)[-1])
 
-        self.context.logger.info("Preparing an ERC20 transaction")
-        tx_hash = yield from self.get_erc20_transfer_safe_tx_hash()
+        self.context.logger.info("Preparing a multisend transaction")
+        tx_hash = yield from self.get_multisend_safe_tx_hash()
         return tx_hash
 
         # # Native transaction (Safe -> recipient)
@@ -599,7 +599,7 @@ class TxPreparationBehaviour(
             contract_id=str(ERC20.contract_id),
             contract_callable="build_transfer_tx",
             recipient=self.params.transfer_target_address,
-            amount=1 / 10**18,
+            amount=1,
             chain_id=GNOSIS_CHAIN_ID,
         )
 
