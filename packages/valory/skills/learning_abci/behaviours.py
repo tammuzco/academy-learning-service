@@ -44,21 +44,26 @@ from packages.valory.skills.abstract_round_abci.behaviours import (
 from packages.valory.skills.abstract_round_abci.io_.store import SupportedFiletype
 from packages.valory.skills.learning_abci.models import (
     CoingeckoSpecs,
+    DefiLlamaSpecs,
     Params,
     SharedState,
 )
 from packages.valory.skills.learning_abci.payloads import (
     DataPullPayload,
+    DefiLlamaPullPayload,
     DecisionMakingPayload,
     TxPreparationPayload,
+    PostPreparationPayload,
 )
 from packages.valory.skills.learning_abci.rounds import (
     DataPullRound,
+    DefiLlamaPullRound,
     DecisionMakingRound,
     Event,
     LearningAbciApp,
     SynchronizedData,
     TxPreparationRound,
+    PostPreparationRound,
 )
 from packages.valory.skills.transaction_settlement_abci.payload_tools import (
     hash_payload_to_hex,
@@ -101,6 +106,11 @@ class LearningBaseBehaviour(BaseBehaviour, ABC):  # pylint: disable=too-many-anc
         return self.context.coingecko_specs
 
     @property
+    def defillama_specs(self) -> DefiLlamaSpecs:
+        """Get the DefiLlama api specs."""
+        return self.context.defillama_specs
+
+    @property
     def metadata_filepath(self) -> str:
         """Get the temporary filepath to the metadata."""
         return str(Path(mkdtemp()) / METADATA_FILENAME)
@@ -132,6 +142,8 @@ class DataPullBehaviour(LearningBaseBehaviour):  # pylint: disable=too-many-ance
             # This call replaces the previous price, it is just an example
             price = yield from self.get_token_price_specs()
 
+            symbol = yield from self.get_token_symbol()
+
             # Store the price in IPFS
             price_ipfs_hash = yield from self.send_price_to_ipfs(price)
 
@@ -146,12 +158,13 @@ class DataPullBehaviour(LearningBaseBehaviour):  # pylint: disable=too-many-ance
             payload = DataPullPayload(
                 sender=sender,
                 price=price,
+                symbol=symbol,
                 price_ipfs_hash=price_ipfs_hash,
                 native_balance=native_balance,
                 erc20_balance=erc20_balance,
             )
 
-        # Send the payload to all agents and mark the behaviour as done
+        # Send the payload to all agents and mark the behaviour a∂s done
         with self.context.benchmark_tool.measure(self.behaviour_id).consensus():
             yield from self.send_a2a_transaction(payload)
             yield from self.wait_until_round_end()
@@ -277,7 +290,95 @@ class DataPullBehaviour(LearningBaseBehaviour):  # pylint: disable=too-many-ance
         self.context.logger.error(f"Got native balance: {balance}")
 
         return balance
+    
+    def get_token_symbol(self) -> Generator[None, None, Optional[str]]:
+        """Get token symbol"""
+        self.context.logger.info(
+            f"Getting token symbol for contract at {self.params.olas_token_address}"
+        )
 
+        # Use the contract api to interact with the ERC20 contract
+        response_msg = yield from self.get_contract_api_response(
+            performative=ContractApiMessage.Performative.GET_RAW_TRANSACTION,  # type: ignore
+            contract_address=self.params.olas_token_address,
+            contract_id=str(ERC20.contract_id),
+            contract_callable="get_symbol",
+            chain_id=GNOSIS_CHAIN_ID,
+        )
+
+        # Check response performative
+        if response_msg.performative != ContractApiMessage.Performative.RAW_TRANSACTION:
+            self.context.logger.error(
+                f"Unexpected performative: {response_msg.performative}"
+            )
+            return None
+
+        # Extract symbol from response
+        symbol = response_msg.raw_transaction.body.get("symbol", None)
+        error = response_msg.raw_transaction.body.get("error", None)
+
+        if error is not None:
+            self.context.logger.error(f"Error getting symbol: {error}")
+            return None
+
+        if symbol is None:
+            self.context.logger.error("Symbol not found in response")
+            return None
+
+        self.context.logger.info(
+            f"Token at {self.params.olas_token_address} has symbol {symbol}"
+        )
+        return symbol
+
+
+class DefiLlamaPullBehaviour(LearningBaseBehaviour): # pylint: disable=too-many-ancestors
+    """DefiLlamaPullBehaviour"""
+
+    matching_round: Type[AbstractRound] = DefiLlamaPullRound
+
+    def async_act(self) -> Generator:
+        """Do the act, supporting asynchronous execution."""
+
+        with self.context.benchmark_tool.measure(self.behaviour_id).local():
+            sender = self.context.agent_address
+            self.context.logger.info(f"Starting DefiLlamaPullBehaviour from Agent: {sender}")
+            tvl = yield from self.get_uniswap_tvl()
+            self.context.logger.info(f"Uploading to IPFS={tvl}")
+            ipfs_hash = yield from self.send_tvl_to_ipfs(tvl)
+      
+            payload = DefiLlamaPullPayload(
+                sender=sender,
+                tvl=tvl,
+                tvl_ipfs_hash=ipfs_hash)
+         
+        with self.context.benchmark_tool.measure(self.behaviour_id).consensus():
+            yield from self.send_a2a_transaction(payload)
+            yield from self.wait_until_round_end()
+     
+        self.set_done()
+
+    def get_uniswap_tvl(self) -> Generator[None, None, Optional[float]]:
+        """Get Uniswap TVL from DefiLlama"""
+        self.context.logger.info("Attempting to fetch Uniswap TVL")
+        specs = self.defillama_specs.get_spec()
+        response = yield from self.get_http_response(**specs)
+        tvl = float(response.body)
+        self.context.logger.info(f"Got response: {float(response.body)}")
+        # tvl = self.defillama_specs.process_response(response)
+        self.context.logger.info(f"Got Uniswap TVL: {tvl}")
+
+        return tvl
+   
+    def send_tvl_to_ipfs(self, tvl: float) -> Generator[None, None, Optional[str]]:
+        """Send TVL to IPFS"""
+        data = {"tvl": tvl}
+        self.context.logger.info("Uploading Uniswap TVL to IPFS")
+        tvl_ipfs_hash = yield from self.send_to_ipfs(
+            filename=self.metadata_filepath, obj=data, filetype=SupportedFiletype.JSON
+        )
+        self.context.logger.info(f"Uploading Object: {data} with hash: {tvl_ipfs_hash}")
+
+        return tvl_ipfs_hash
 
 class DecisionMakingBehaviour(
     LearningBaseBehaviour
@@ -341,13 +442,15 @@ class DecisionMakingBehaviour(
         last_number = int(str(native_balance)[-1])
 
         # If the number is even, we transact
-        if last_number % 2 == 0:
-            self.context.logger.info("Number is even. Transacting.")
-            return Event.TRANSACT.value
+        # Changed to always true - so we will transact every time
+        # if True: #last_number: % 2 == 0:
+        #####################################################
+        self.context.logger.info("Number is even. Transacting.")
+        return Event.TRANSACT.value
 
         # Otherwise we send the DONE event
-        self.context.logger.info("Number is odd. Not transacting.")
-        return Event.DONE.value
+        # self.context.logger.info("Number is odd. Not transacting.")
+        # return Event.DONE.value
 
     def get_block_number(self) -> Generator[None, None, Optional[int]]:
         """Get the block number"""
@@ -383,7 +486,6 @@ class DecisionMakingBehaviour(
         )
         self.context.logger.error(f"Got price from IPFS: {price}")
         return price
-
 
 class TxPreparationBehaviour(
     LearningBaseBehaviour
@@ -425,22 +527,26 @@ class TxPreparationBehaviour(
         self.context.logger.info(f"Timestamp is {now}")
         last_number = int(str(now)[-1])
 
-        # Native transaction (Safe -> recipient)
-        if last_number in [0, 1, 2, 3]:
-            self.context.logger.info("Preparing a native transaction")
-            tx_hash = yield from self.get_native_transfer_safe_tx_hash()
-            return tx_hash
-
-        # ERC20 transaction (Safe -> recipient)
-        if last_number in [4, 5, 6]:
-            self.context.logger.info("Preparing an ERC20 transaction")
-            tx_hash = yield from self.get_erc20_transfer_safe_tx_hash()
-            return tx_hash
-
-        # Multisend transaction (both native and ERC20) (Safe -> recipient)
         self.context.logger.info("Preparing a multisend transaction")
         tx_hash = yield from self.get_multisend_safe_tx_hash()
         return tx_hash
+
+        # # Native transaction (Safe -> recipient)
+        # if last_number in [0, 1, 2, 3]:
+        #     self.context.logger.info("Preparing a native transaction")
+        #     tx_hash = yield from self.get_native_transfer_safe_tx_hash()
+        #     return tx_hash
+
+        # # ERC20 transaction (Safe -> recipient)
+        # if last_number in [4, 5, 6]:
+        #     self.context.logger.info("Preparing an ERC20 transaction")
+        #     tx_hash = yield from self.get_erc20_transfer_safe_tx_hash()
+        #     return tx_hash
+
+        # # Multisend transaction (both native and ERC20) (Safe -> recipient)
+        # self.context.logger.info("Preparing a multisend transaction")
+        # tx_hash = yield from self.get_multisend_safe_tx_hash()
+        # return tx_hash
 
     def get_native_transfer_safe_tx_hash(self) -> Generator[None, None, Optional[str]]:
         """Prepare a native safe transaction"""
@@ -650,6 +756,122 @@ class TxPreparationBehaviour(
 
         return safe_tx_hash
 
+class PostPreparationBehaviour(
+    LearningBaseBehaviour
+):  # pylint: disable=too-many-ancestors
+    """PostPreparationBehaviour"""
+
+    matching_round: Type[AbstractRound] = PostPreparationRound
+
+    def async_act(self) -> Generator:
+        """Do the act, supporting asynchronous execution."""
+
+        with self.context.benchmark_tool.measure(self.behaviour_id).local():
+            sender = self.context.agent_address
+
+            # Get the transaction hash
+            tx_hash = yield from self.get_tx_hash()
+
+            payload = PostPreparationPayload(
+                sender=sender, tx_submitter=self.auto_behaviour_id(), tx_hash=tx_hash
+            )
+
+        with self.context.benchmark_tool.measure(self.behaviour_id).consensus():
+            yield from self.send_a2a_transaction(payload)
+            yield from self.wait_until_round_end()
+
+        self.set_done()
+
+    def get_tx_hash(self) -> Generator[None, None, Optional[str]]:
+        """Get the transaction hash"""
+
+        # Native transaction (Safe -> recipient)
+        self.context.logger.info("Preparing a native transaction")
+        tx_hash = yield from self.get_native_transfer_safe_tx_hash()
+        return tx_hash
+
+    def get_native_transfer_safe_tx_hash(self) -> Generator[None, None, Optional[str]]:
+        """Prepare a native safe transaction"""
+
+        # Transaction data
+        # This method is not a generator, therefore we don't use yield from
+        data = self.get_native_transfer_data()
+
+        # Prepare safe transaction
+        safe_tx_hash = yield from self._build_safe_tx_hash(**data)
+        self.context.logger.info(f"Native transfer hash is {safe_tx_hash}")
+
+        return safe_tx_hash
+
+    def get_native_transfer_data(self) -> Dict:
+        """Get the native transaction data"""
+        # Send 1 wei to the recipient
+        data = {VALUE_KEY: 1, TO_ADDRESS_KEY: self.params.transfer_target_address}
+        self.context.logger.info(f"Native transfer data is {data}")
+        return data
+
+    def _build_safe_tx_hash(
+        self,
+        to_address: str,
+        value: int = ZERO_VALUE,
+        data: bytes = EMPTY_CALL_DATA,
+        operation: int = SafeOperation.CALL.value,
+    ) -> Generator[None, None, Optional[str]]:
+        """Prepares and returns the safe tx hash for a multisend tx."""
+
+        self.context.logger.info(
+            f"Preparing Safe transaction [{self.synchronized_data.safe_contract_address}]"
+        )
+
+        # Prepare the safe transaction
+        response_msg = yield from self.get_contract_api_response(
+            performative=ContractApiMessage.Performative.GET_STATE,  # type: ignore
+            contract_address=self.synchronized_data.safe_contract_address,
+            contract_id=str(GnosisSafeContract.contract_id),
+            contract_callable="get_raw_safe_transaction_hash",
+            to_address=to_address,
+            value=value,
+            data=data,
+            safe_tx_gas=SAFE_GAS,
+            chain_id=GNOSIS_CHAIN_ID,
+            operation=operation,
+        )
+
+        # Check for errors
+        if response_msg.performative != ContractApiMessage.Performative.STATE:
+            self.context.logger.error(
+                "Couldn't get safe tx hash. Expected response performative "
+                f"{ContractApiMessage.Performative.STATE.value!r}, "  # type: ignore
+                f"received {response_msg.performative.value!r}: {response_msg}."
+            )
+            return None
+
+        # Extract the hash and check it has the correct length
+        tx_hash: Optional[str] = response_msg.state.body.get("tx_hash", None)
+
+        if tx_hash is None or len(tx_hash) != TX_HASH_LENGTH:
+            self.context.logger.error(
+                "Something went wrong while trying to get the safe transaction hash. "
+                f"Invalid hash {tx_hash!r} was returned."
+            )
+            return None
+
+        # Transaction to hex
+        tx_hash = tx_hash[2:]  # strip the 0x
+
+        safe_tx_hash = hash_payload_to_hex(
+            safe_tx_hash=tx_hash,
+            ether_value=value,
+            safe_tx_gas=SAFE_GAS,
+            to_address=to_address,
+            data=data,
+            operation=operation,
+        )
+
+        self.context.logger.info(f"Safe transaction hash is {safe_tx_hash}")
+
+        return safe_tx_hash
+
 
 class LearningRoundBehaviour(AbstractRoundBehaviour):
     """LearningRoundBehaviour"""
@@ -658,6 +880,8 @@ class LearningRoundBehaviour(AbstractRoundBehaviour):
     abci_app_cls = LearningAbciApp  # type: ignore
     behaviours: Set[Type[BaseBehaviour]] = [  # type: ignore
         DataPullBehaviour,
+        DefiLlamaPullBehaviour,
         DecisionMakingBehaviour,
         TxPreparationBehaviour,
+        PostPreparationBehaviour
     ]

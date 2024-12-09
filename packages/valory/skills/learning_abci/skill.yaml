@@ -7,18 +7,18 @@ license: Apache-2.0
 aea_version: '>=1.0.0, <2.0.0'
 fingerprint:
   __init__.py: bafybeiho3lkochqpmes4f235chq26oggmwnol3vjuvhosleoubbjirbwaq
-  behaviours.py: bafybeiaiy6sh7aqo4zzghnejv55vs43vqtpaipj5cpabx32qdjrqleeeie
+  behaviours.py: bafybeig3urlonzegli7xfj2xxmvo5ioywhwmr5yi6rqh6ypk6blran2v5q
   dialogues.py: bafybeifqjbumctlffx2xvpga2kcenezhe47qhksvgmaylyp5ypwqgfar5u
-  fsm_specification.yaml: bafybeigbbydxuqephdpatb3fp3sxnvr77bfvvo5hwjimxfpgyl32wupe64
+  fsm_specification.yaml: bafybeicylvt4vf6ti3kje4jfspxeplefxjuhh3dsvesunrrhf5gnkcx324
   handlers.py: bafybeigjadr4thz6hfpfx5abezbwnqhbxmachf4efasrn4z2vqhsqgnyvi
-  models.py: bafybeicreffhurci7jzpwvxnlo5z3a2j3vcfgkopg2gtwwxfrncbzk77ra
-  payloads.py: bafybeidc6qqnfvd7qovjatt2i2kbga7pj6epdghlzqxdhzx6b6j6p7ubvm
-  rounds.py: bafybeibcxdou2opzsof4fcnaijfdgzpaaggmucyolhegns3k4zpzvuom2i
+  models.py: bafybeiefdb42mnild4pkh27mfzfjowjvcuqdw5ncqkha32sichiponusxq
+  payloads.py: bafybeif23cazuddbxkdqcksaww4wutbk73rnihx3nr7ncigrhbold7rzka
+  rounds.py: bafybeif3uo4qo7chuuigh446bvoiwxf7napy2s6geoq2u4ltpztddjafry
 fingerprint_ignore_patterns: []
 connections: []
 contracts:
 - valory/gnosis_safe:0.1.0:bafybeib375xmvcplw7ageic2np3hq4yqeijrvd5kl7rrdnyvswats6ngmm
-- valory/erc20:0.1.0:bafybeibyhuxozkkvsymqz45vxixr3w3bs4vsvxg2nsx5jlyi3f3hhn7ezi
+- valory/erc20:0.1.0:bafybeiddyegm64iawk4kyesuebhxynz7rfjq7q5f2bu6wkuehg6rbrx7be
 - valory/multisend:0.1.0:bafybeig5byt5urg2d2bsecufxe5ql7f4mezg3mekfleeh32nmuusx66p4y
 protocols:
 - valory/contract_api:1.0.0:bafybeidgu7o5llh26xp3u3ebq3yluull5lupiyeu6iooi2xyymdrgnzq5i
@@ -58,7 +58,7 @@ models:
     class_name: AbciDialogues
   benchmark_tool:
     args:
-      log_dir: /logs
+      log_dir: /tmp
     class_name: BenchmarkTool
   contract_api_dialogues:
     args: {}
@@ -147,6 +147,17 @@ models:
       retries: 5
       url: https://api.coingecko.com/api/v3/simple/price
     class_name: CoingeckoSpecs
+  defillama_specs:
+    args:
+      api_id: defillama
+      headers: {}
+      method: GET
+      parameters: {}
+      response_key: null
+      response_type: dict
+      retries: 5
+      url: https://api.llama.fi/tvl/uniswap
+    class_name: DefiLlamaSpecs
   requests:
     args: {}
     class_name: Requests
